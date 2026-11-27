@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Priorización de vulnerabilidades Vicarius</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Plan: marca Vicarius. Tema claro por defecto, azul 4C4EF0 como único acento, degradados de riesgo oficiales
+   para P1 a P4, retícula de cuadros en el encabezado. Resumen arriba, detalle abajo. */
+:root{
+  --bg:#FFFFFF; --bg2:#F6F6F8; --surface:#FFFFFF; --ink:#10121F; --ink2:#4B4B6F; --ink3:#686881;
+  --line:#E3E3EA; --accent:#4C4EF0; --accent-strong:#32349B; --accent-soft:#ECECFF; --accent-mid:#C9CAFB;
+  --wash:#D6D7FF; --grid:rgba(76,78,240,.10);
+  --p1a:#DF5B11; --p1b:#A00000; --p2a:#EE3448; --p2b:#CB045A; --p3a:#DB5EEF; --p3b:#6F23AE; --p4a:#9799AE; --p4b:#C9CBDD;
+  --p1:#C2410C; --p2:#D81B55; --p3:#8F35C4; --p4:#7C7E96;
+  --ok:#0EA37F; --shadow:0 1px 2px rgba(16,18,31,.05),0 8px 24px rgba(16,18,31,.06);
+  --logo-light:block; --logo-dark:none;
+  --font:"Albert Sans",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#10121F; --bg2:#151829; --surface:#1A1D30; --ink:#FFFFFF; --ink2:#C4C4CF; --ink3:#9E9EAC;
+    --line:#2D3050; --accent:#8789FF; --accent-strong:#C9CAFB; --accent-soft:#23264A; --accent-mid:#4648C7;
+    --wash:#2A2D6B; --grid:rgba(135,137,255,.10);
+    --p1:#FF7A3D; --p2:#FF5C7F; --p3:#DB7CF2; --p4:#9799AE; --p4b:#5A5C78;
+    --ok:#2ED3A8; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+    --logo-light:none; --logo-dark:block; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10121F; --bg2:#151829; --surface:#1A1D30; --ink:#FFFFFF; --ink2:#C4C4CF; --ink3:#9E9EAC;
+  --line:#2D3050; --accent:#8789FF; --accent-strong:#C9CAFB; --accent-soft:#23264A; --accent-mid:#4648C7;
+  --wash:#2A2D6B; --grid:rgba(135,137,255,.10);
+  --p1:#FF7A3D; --p2:#FF5C7F; --p3:#DB7CF2; --p4:#9799AE; --p4b:#5A5C78;
+  --ok:#2ED3A8; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  --logo-light:none; --logo-dark:block; color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+h1,h2,h3{font-weight:500;letter-spacing:-.015em;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,4.2vw,44px);line-height:1.08}
+h2{font-size:clamp(22px,2.6vw,30px);line-height:1.15}
+h3{font-size:16px;line-height:1.3}
+p{margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding:0 20px}
+.mono{font-family:var(--mono);font-size:.92em}
+.num{font-variant-numeric:tabular-nums}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+/* Barra superior */
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:16px;min-height:60px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}
+.logo img{height:30px;width:auto}
+.logo .l{display:var(--logo-light)} .logo .d{display:var(--logo-dark)}
+.nav{display:flex;gap:4px;flex-wrap:wrap;margin-left:8px;flex:1}
+.nav a{color:var(--ink2);text-decoration:none;padding:6px 10px;border-radius:8px;font-size:14px}
+.nav a:hover{background:var(--accent-soft);color:var(--accent-strong)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:6px 10px;font-size:13px;cursor:pointer;color:var(--ink2)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 10px;cursor:pointer;font-size:13px;color:var(--ink2)}
+
+/* Encabezado */
+.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line);
+  background:radial-gradient(900px 420px at 100% 0%,var(--wash),transparent 70%),var(--bg)}
+.hero::after{content:"";position:absolute;inset:0 0 0 45%;pointer-events:none;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:56px 56px;mask-image:linear-gradient(90deg,transparent,#000 60%)}
+.hero .wrap{position:relative;z-index:1;padding-top:44px;padding-bottom:36px;display:grid;gap:18px}
+.hero p.lead{max-width:62ch;color:var(--ink2);font-size:17px}
+.hero h1 b{font-weight:500;color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--ink2)}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.chip.warn .dot{background:var(--p1)}
+
+section{padding:40px 0;border-bottom:1px solid var(--line)}
+section.alt{background:var(--bg2)}
+.sec-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.sec-head p{color:var(--ink2);max-width:70ch;margin-top:6px}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:6px}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi .v{font-size:28px;font-weight:500;letter-spacing:-.02em;line-height:1.1}
+.kpi .k{font-size:13px;color:var(--ink2)}
+.kpi.hot .v{color:var(--p1)}
+
+.grid{display:grid;gap:16px;grid-template-columns:repeat(12,1fr)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;gap:10px}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+@media (max-width:960px){.c4,.c5,.c6,.c7,.c8{grid-column:span 12}}
+.card .sub{color:var(--ink3);font-size:13px}
+.chart{position:relative;height:260px;min-width:0}
+.chart.tall{height:300px}
+.plain{background:var(--accent-soft);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.plain b{font-weight:600;color:var(--accent-strong)}
+
+.list{display:flex;flex-direction:column}
+.list .row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px;min-width:0}
+.list .row:last-child{border-bottom:0}
+.list .row .t{min-width:0;overflow-wrap:anywhere}
+.list .row .t small{display:block;color:var(--ink3);font-size:12.5px}
+.tag{display:inline-block;border-radius:6px;padding:1px 6px;font-size:11.5px;font-weight:600;border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
+.tag.kev{border-color:var(--p1);color:var(--p1)}
+.tag.rw{background:var(--p1);border-color:var(--p1);color:#fff}
+.tag.x{border-color:var(--accent);color:var(--accent)}
+.up{color:var(--p1)} .down{color:var(--ok)}
+
+/* Prioridad */
+.pill{display:inline-flex;align-items:center;justify-content:center;min-width:34px;border-radius:999px;padding:2px 9px;font-size:12.5px;font-weight:600;color:#fff}
+.pill.p1{background:linear-gradient(90deg,var(--p1a),var(--p1b))}
+.pill.p2{background:linear-gradient(90deg,var(--p2a),var(--p2b))}
+.pill.p3{background:linear-gradient(90deg,var(--p3a),var(--p3b))}
+.pill.p4{background:linear-gradient(90deg,var(--p4a),var(--p4b));color:#10121F}
+.sev{font-size:12px;font-weight:600}
+.sev.CRITICAL{color:var(--p1)}.sev.HIGH{color:var(--p2)}.sev.MEDIUM{color:var(--p3)}.sev.LOW{color:var(--p4)}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--ink3)}
+.field select,.field input[type=search]{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 10px;font-size:14px;color:var(--ink);min-width:0}
+.field input[type=range]{accent-color:var(--accent);width:150px}
+.check{display:inline-flex;gap:6px;align-items:center;font-size:14px;color:var(--ink2);padding:7px 0}
+.btn{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:10px;padding:8px 14px;font-size:14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:default}
+
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:860px;font-size:14px}
+th{text-align:left;font-weight:500;font-size:12.5px;color:var(--ink3);padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--bg2)}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.r{cursor:pointer}
+tr.r:hover td{background:var(--accent-soft)}
+tr.det td{background:var(--bg2);font-size:13.5px;color:var(--ink2)}
+tr.det .why{color:var(--ink);font-weight:500}
+td.right,th.right{text-align:right}
+.pager{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;color:var(--ink3);font-size:13.5px}
+
+.heat{display:grid;grid-template-columns:auto repeat(5,1fr);gap:4px;font-size:13px}
+.heat .h{color:var(--ink3);font-size:12px;padding:4px 6px;display:flex;align-items:center}
+.heat .h.c{justify-content:center}
+.heat button{border:1px solid var(--line);border-radius:8px;padding:10px 4px;cursor:pointer;color:var(--ink);font-variant-numeric:tabular-nums;font-size:14px}
+.heat button[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:1px}
+.bars{display:flex;flex-direction:column;gap:6px}
+.bars button{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:8px;align-items:center;border:0;background:transparent;padding:2px 0;cursor:pointer;text-align:left;font-size:13.5px;color:var(--ink)}
+.bars .bar{height:10px;border-radius:5px;background:var(--accent-mid)}
+.bars .bar i{display:block;height:100%;border-radius:5px;background:var(--accent)}
+.bars .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.sumbox{white-space:pre-wrap;font-family:var(--mono);font-size:13px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--ink);overflow-wrap:anywhere}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.rule{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--surface);display:flex;flex-direction:column;gap:8px}
+.rule ul{margin:0;padding-left:18px;color:var(--ink2);font-size:14px}
+.src{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.src .card{box-shadow:none}
+.spark{display:flex;align-items:flex-end;gap:2px;height:38px}
+.spark i{flex:1;background:var(--accent-mid);border-radius:2px 2px 0 0;min-height:2px}
+.spark i.last{background:var(--accent)}
+.cta{background:radial-gradient(900px 380px at 15% 120%,#6465DF,#32349B);color:#fff;border-radius:20px;padding:28px;display:grid;gap:22px}
+.cta .head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap}
+.cta .head>div{display:grid;gap:10px;max-width:62ch}
+.cta p{color:#E3E3FF}
+.cta .btn{background:#fff;color:#32349B;border-color:#fff}
+.cta .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+.cta .flow .st{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.26);border-radius:999px;padding:6px 12px}
+.cta .flow .st b{font-weight:600}
+.cta .flow .st small{color:#C9CAFB;font-size:12.5px}
+.cta .flow .ar{color:#C9CAFB}
+.cta .prods{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.cta .prod{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.24);border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0;transition:transform .18s,background .18s}
+.cta .prod:hover{transform:translateY(-3px);background:rgba(255,255,255,.15)}
+.cta .prod .art{border-radius:12px;background:linear-gradient(160deg,rgba(16,18,31,.42),rgba(16,18,31,.18));border:1px solid rgba(255,255,255,.14);overflow:hidden;
+  background-image:linear-gradient(160deg,rgba(16,18,31,.42),rgba(16,18,31,.18)),linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px);background-size:auto,22px 22px,22px 22px}
+.cta .prod .art svg{display:block;width:100%;height:auto}
+.cta .prod .nm{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.cta .prod .role{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#C9CAFB;font-weight:600}
+.cta .prod p{font-size:15px;color:#fff}
+.cta .prod ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;font-size:14px;color:#ECECFF}
+.cta .prod li{display:grid;grid-template-columns:18px 1fr;gap:8px;align-items:start}
+.cta .prod li::before{content:"";width:16px;height:16px;margin-top:2px;border-radius:50%;background:#0EC0A4 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 8.2l2.3 2.3 4.7-5' fill='none' stroke='%2310121F' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat}
+.cta .sweep{transform-origin:110px 65px;animation:sweep 5s linear infinite}
+.cta .pulse{animation:pulse 1.8s ease-in-out infinite}
+@keyframes sweep{to{transform:rotate(360deg)}}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.cta .sweep,.cta .pulse{animation:none}.cta .prod{transition:none}}
+@media (max-width:860px){.cta .prods{grid-template-columns:1fr}}
+footer{padding:26px 0 40px;color:var(--ink3);font-size:13px}
+footer .wrap{display:flex;gap:14px;justify-content:space-between;flex-wrap:wrap}
+#state{padding:60px 20px;text-align:center;color:var(--ink2)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:50}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.toast{transition:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#inicio" aria-label="Vicarius"><img class="l" src="logo-light.svg" alt="Vicarius"><img class="d" src="logo-dark.svg" alt="Vicarius"></a>
+    <nav class="nav" aria-label="Secciones">
+      <a href="#panorama" data-i18n="nav_pan"></a>
+      <a href="#lista" data-i18n="nav_list"></a>
+      <a href="#resumen" data-i18n="nav_sum"></a>
+      <a href="#region" data-i18n="nav_reg"></a>
+      <a href="#metodologia" data-i18n="nav_met"></a>
+    </nav>
+    <div class="seg" role="group" aria-label="Idioma" id="langs">
+      <button type="button" data-lang="es">ES</button><button type="button" data-lang="pt">PT</button><button type="button" data-lang="en">EN</button>
+    </div>
+    <button type="button" class="iconbtn" id="theme"></button>
+  </div>
+</header>
+
+<div class="hero" id="inicio">
+  <div class="wrap">
+    <div class="eyebrow" data-i18n="hero_eye"></div>
+    <h1 data-i18n-html="hero_h1"></h1>
+    <p class="lead" data-i18n="hero_lead"></p>
+    <div class="chips" id="chips"></div>
+  </div>
+</div>
+
+<div id="state" data-i18n="loading"></div>
+
+<main id="app" hidden>
+<section id="panorama">
+  <div class="wrap">
+    <div class="sec-head"><div><div class="eyebrow" data-i18n="pan_eye"></div><h2 data-i18n="pan_h"></h2><p data-i18n="pan_p"></p></div></div>
+    <div class="kpis" id="kpis"></div>
+    <div class="grid">
+      <div class="card c7"><h3 data-i18n="c_month_h"></h3><div class="sub" data-i18n="c_month_s"></div><div class="chart"><canvas id="chMonth"></canvas></div><div class="plain" id="pl_month"></div></div>
+      <div class="card c5"><h3 data-i18n="c_epss_h"></h3><div class="sub" id="c_epss_s"></div><div class="chart"><canvas id="chEpss"></canvas></div><div class="plain" id="pl_epss"></div></div>
+      <div class="card c7"><h3 data-i18n="c_speed_h"></h3><div class="sub" data-i18n="c_speed_s"></div><div class="chart"><canvas id="chSpeed"></canvas></div><div class="plain" id="pl_speed"></div></div>
+      <div class="card c5"><h3 data-i18n="c_vend_h"></h3><div class="sub" data-i18n="c_vend_s"></div><div class="chart"><canvas id="chVend"></canvas></div></div>
+      <div class="card c7"><h3 data-i18n="c_tte_h"></h3><div class="sub" data-i18n="c_tte_s"></div><div class="chart tall"><canvas id="chTte"></canvas></div><div class="plain" id="pl_tte"></div></div>
+      <div class="card c5"><h3 data-i18n="c_chg_h"></h3><div class="sub" data-i18n="c_chg_s"></div><div class="list" id="lsChg"></div></div>
+      <div class="card c6"><h3 data-i18n="c_top_h"></h3><div class="sub" data-i18n="c_top_s"></div><div class="list" id="lsTop"></div></div>
+      <div class="card c6"><h3 data-i18n="c_last_h"></h3><div class="sub" data-i18n="c_last_s"></div><div class="list" id="lsLast"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="lista" class="alt">
+  <div class="wrap">
+    <div class="sec-head"><div><div class="eyebrow" data-i18n="ls_eye"></div><h2 data-i18n="ls_h"></h2><p id="ls_p"></p></div></div>
+    <div class="kpis" id="kpis2"></div>
+    <div class="grid" style="margin-bottom:16px">
+      <div class="card c7"><h3 data-i18n="c_day_h"></h3><div class="sub" data-i18n="c_day_s"></div><div class="chart"><canvas id="chDay"></canvas></div></div>
+      <div class="card c5"><h3 data-i18n="c_heat_h"></h3><div class="sub" data-i18n="c_heat_s"></div><div class="heat" id="heat"></div></div>
+      <div class="card c5"><h3 data-i18n="c_prod_h"></h3><div class="sub" id="c_prod_s"></div><div class="bars" id="prods"></div></div>
+      <div class="card c7"><h3 data-i18n="c_ctx_h"></h3><div class="sub" data-i18n="c_ctx_s"></div>
+        <div class="controls">
+          <label class="field"><span data-i18n="f_crit"></span><select id="fCrit"><option value="std" data-i18n="o_std"></option><option value="hi" data-i18n="o_hi"></option><option value="lo" data-i18n="o_lo"></option></select></label>
+          <label class="field"><span data-i18n="f_exp"></span><select id="fExp"><option value="na" data-i18n="o_na"></option><option value="net" data-i18n="o_net"></option><option value="int" data-i18n="o_int"></option></select></label>
+          <label class="field"><span id="lb_t1"></span><input type="range" id="t1" min="20" max="90" step="5" value="50"></label>
+          <label class="field"><span id="lb_t2"></span><input type="range" id="t2" min="2" max="40" step="1" value="10"></label>
+        </div>
+        <div class="plain" data-i18n-html="ctx_note"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="controls">
+        <label class="field"><span data-i18n="f_search"></span><input type="search" id="fQ" placeholder="CVE-2026-…"></label>
+        <label class="field"><span data-i18n="f_prio"></span><select id="fP"><option value="" data-i18n="o_allp"></option><option value="1">P1</option><option value="2">P2</option><option value="3">P3</option><option value="4">P4</option></select></label>
+        <label class="field"><span data-i18n="f_sev"></span><select id="fS"><option value="" data-i18n="o_alls"></option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option><option value="NONE" data-i18n="o_nocvss"></option></select></label>
+        <label class="check"><input type="checkbox" id="fK"><span data-i18n="f_kev"></span></label>
+        <label class="check"><input type="checkbox" id="fX"><span data-i18n="f_x"></span></label>
+        <label class="check"><input type="checkbox" id="fC"><span data-i18n="f_chg"></span></label>
+        <span style="flex:1"></span>
+        <button type="button" class="btn ghost" id="bReset" data-i18n="b_reset"></button>
+        <button type="button" class="btn ghost" id="bCopy" data-i18n="b_copy"></button>
+        <button type="button" class="btn" id="bCsv" data-i18n="b_csv" hidden></button>
+      </div>
+      <div class="tablewrap"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
+      <div class="pager"><span id="pgInfo"></span><span><button type="button" class="btn ghost" id="pgPrev" data-i18n="b_prev"></button> <button type="button" class="btn ghost" id="pgNext" data-i18n="b_next"></button></span></div>
+      <div class="sub" id="ls_note"></div>
+    </div>
+  </div>
+</section>
+
+<section id="resumen">
+  <div class="wrap">
+    <div class="sec-head"><div><div class="eyebrow" data-i18n="sm_eye"></div><h2 data-i18n="sm_h"></h2><p data-i18n="sm_p"></p></div></div>
+    <div class="grid">
+      <div class="card c6"><h3 data-i18n="sm_d"></h3><div class="sumbox" id="sumD"></div><button type="button" class="btn ghost" data-copy="sumD" data-i18n="b_copysum" style="align-self:flex-start"></button></div>
+      <div class="card c6"><h3 data-i18n="sm_w"></h3><div class="sumbox" id="sumW"></div><button type="button" class="btn ghost" data-copy="sumW" data-i18n="b_copysum" style="align-self:flex-start"></button></div>
+    </div>
+  </div>
+</section>
+
+<section id="region" class="alt">
+  <div class="wrap">
+    <div class="sec-head"><div><div class="eyebrow" data-i18n="rg_eye"></div><h2 data-i18n="rg_h"></h2><p data-i18n="rg_p"></p></div></div>
+    <div class="seg" role="group" id="regs" style="margin-bottom:14px;flex-wrap:wrap"></div>
+    <div class="kpis" id="kpisR"></div>
+    <div class="grid">
+      <div class="card c5"><h3 data-i18n="rg_rank"></h3><div class="sub" data-i18n="rg_pick"></div><div class="bars" id="countries" style="max-height:430px;overflow-y:auto;padding-right:6px"></div></div>
+      <div class="card c7"><h3 id="rg_title"></h3><div class="sub" data-i18n="rg_m"></div><div class="chart" style="height:200px"><canvas id="chReg"></canvas></div><div class="sub" data-i18n="rg_g"></div><div class="bars" id="groups"></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="metodologia">
+  <div class="wrap">
+    <div class="sec-head"><div><div class="eyebrow" data-i18n="mt_eye"></div><h2 data-i18n="mt_h"></h2><p data-i18n="mt_p"></p></div></div>
+    <div class="rules" id="rules"></div>
+    <h3 style="margin:26px 0 12px" data-i18n="mt_src"></h3>
+    <div class="src" id="sources"></div>
+    <div class="plain" style="margin-top:16px" data-i18n-html="mt_lim"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta" id="plataforma">
+      <div class="head">
+        <div><h2 data-i18n="cta_h"></h2><p data-i18n="cta_p"></p></div>
+        <a class="btn" href="https://www.vicarius.io/request-a-demo" target="_blank" rel="noopener" data-i18n="cta_b"></a>
+      </div>
+      <div class="flow" aria-label="Ciclo">
+        <span class="st"><b data-i18n="fl1"></b><small>vRadar</small></span><span class="ar">→</span>
+        <span class="st"><b data-i18n="fl2"></b><small>vRx</small></span><span class="ar">→</span>
+        <span class="st"><b data-i18n="fl3"></b><small>vRx</small></span><span class="ar">→</span>
+        <span class="st"><b data-i18n="fl4"></b><small>vIntelligence</small></span>
+      </div>
+      <div class="prods">
+        <div class="prod"><div class="art"><svg viewBox="0 0 300 130" role="img" aria-label="vRx"><g fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="22" y="14" width="176" height="102" rx="10" stroke-opacity=".5"/><path d="M22 36h176" stroke-opacity=".35"/><g stroke-opacity=".9"><path d="M60 54h70M60 76h56M60 98h64"/></g><g><rect x="150" y="46" width="36" height="16" rx="8" fill="#0EC0A4" stroke="none"/><rect x="150" y="68" width="36" height="16" rx="8" fill="#0EC0A4" stroke="none"/><rect class="pulse" x="150" y="90" width="36" height="16" rx="8" fill="#FF6872" stroke="none"/><path d="M162 54l4 4 8-8M162 76l4 4 8-8" stroke="#10121F"/></g><circle cx="42" cy="54" r="5" fill="#DF5B11" stroke="none"/><circle cx="42" cy="76" r="5" fill="#EE3448" stroke="none"/><circle cx="42" cy="98" r="5" fill="#DB5EEF" stroke="none"/><path d="M246 30l30 11v24c0 20-13 33-30 40-17-7-30-20-30-40V41z" fill="rgba(255,255,255,.14)"/><path d="M233 66l9 9 18-19" stroke-width="3"/></g><circle cx="34" cy="25" r="2.5" fill="#fff" fill-opacity=".6"/><circle cx="44" cy="25" r="2.5" fill="#fff" fill-opacity=".6"/><circle cx="54" cy="25" r="2.5" fill="#fff" fill-opacity=".6"/></svg></div><div><div class="role" data-i18n="pr1_r"></div><div class="nm">vRx</div></div><p data-i18n="pr1_d"></p><ul><li data-i18n="pr1_a"></li><li data-i18n="pr1_b"></li><li data-i18n="pr1_c"></li><li data-i18n="pr1_e"></li></ul></div>
+        <div class="prod"><div class="art"><svg viewBox="0 0 300 130" role="img" aria-label="vRadar"><g fill="none" stroke="#fff" stroke-width="1.6"><circle cx="110" cy="65" r="52" stroke-opacity=".5"/><circle cx="110" cy="65" r="35" stroke-opacity=".35"/><circle cx="110" cy="65" r="18" stroke-opacity=".3"/><path d="M58 65h104M110 13v104" stroke-opacity=".2"/></g><g class="sweep"><path d="M110 65L110 13A52 52 0 0 1 155 39Z" fill="#4EDDF0" fill-opacity=".28"/><path d="M110 65L155 39" stroke="#4EDDF0" stroke-width="2"/></g><circle cx="110" cy="65" r="3.5" fill="#fff"/><circle cx="131" cy="40" r="4.5" fill="#C0F133"/><circle cx="84" cy="50" r="4" fill="#fff"/><circle cx="95" cy="92" r="4" fill="#fff"/><circle class="pulse" cx="140" cy="84" r="5" fill="#FF6872"/><circle cx="72" cy="78" r="3.5" fill="#fff" fill-opacity=".7"/><g fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"><rect x="192" y="22" width="88" height="86" rx="10" stroke-opacity=".5"/><path d="M206 44l5 5 9-10M206 66l5 5 9-10" stroke="#0EC0A4" stroke-width="2.4"/><path d="M207 85l8 8M215 85l-8 8" stroke="#FF6872" stroke-width="2.4"/><path d="M230 44h36M230 66h30M230 89h34" stroke-opacity=".85"/></g></svg></div><div><div class="role" data-i18n="pr2_r"></div><div class="nm">vRadar</div></div><p data-i18n="pr2_d"></p><ul><li data-i18n="pr2_a"></li><li data-i18n="pr2_b"></li><li data-i18n="pr2_c"></li><li data-i18n="pr2_e"></li></ul></div>
+        <div class="prod"><div class="art"><svg viewBox="0 0 300 130" role="img" aria-label="vIntelligence"><g fill="none" stroke="#fff" stroke-width="1.6" stroke-opacity=".55"><path d="M40 40L78 66 40 96M78 66L118 44M78 66L116 92M118 44L116 92"/></g><circle cx="40" cy="40" r="7" fill="#DF5B11"/><circle cx="40" cy="96" r="7" fill="#DB5EEF"/><circle cx="78" cy="66" r="10" fill="#fff"/><circle cx="118" cy="44" r="7" fill="#4EDDF0"/><circle cx="116" cy="92" r="7" fill="#C0F133"/><g><rect x="160" y="84" width="18" height="28" rx="4" fill="#fff" fill-opacity=".35"/><rect x="186" y="68" width="18" height="44" rx="4" fill="#fff" fill-opacity=".5"/><rect x="212" y="50" width="18" height="62" rx="4" fill="#fff" fill-opacity=".7"/><rect x="238" y="30" width="18" height="82" rx="4" fill="#0EC0A4"/></g><path d="M160 74l28-14 26-18 36-24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M238 16h14v14" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><text x="268" y="26" fill="#fff" font-size="13" font-weight="600" font-family="inherit">ROI</text><path d="M152 112h132" stroke="#fff" stroke-opacity=".4" stroke-width="1.6"/></svg></div><div><div class="role" data-i18n="pr3_r"></div><div class="nm">vIntelligence</div></div><p data-i18n="pr3_d"></p><ul><li data-i18n="pr3_a"></li><li data-i18n="pr3_b"></li><li data-i18n="pr3_c"></li><li data-i18n="pr3_e"></li></ul></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer><div class="wrap"><span id="ft_l"></span><span data-i18n="ft_r"></span></div></footer>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+"use strict";
+/* ---------- Textos: [es, pt, en] ---------- */
+const T={
+nav_pan:["Panorama","Panorama","Overview"],nav_list:["Lista priorizada","Lista priorizada","Prioritized list"],nav_sum:["Resúmenes","Resumos","Summaries"],nav_reg:["Ransomware en las Américas","Ransomware nas Américas","Ransomware in the Americas"],nav_met:["Metodología","Metodologia","Methodology"],
+hero_eye:["Inteligencia de vulnerabilidades","Inteligência de vulnerabilidades","Vulnerability intelligence"],
+hero_h1:["Qué se está explotando y <b>qué parchear primero</b>","O que está sendo explorado e <b>o que corrigir primeiro</b>","What is being exploited and <b>what to patch first</b>"],
+hero_lead:["Cruce de NVD, CISA KEV, EPSS y SSVC con señales de exploit público. Cada vulnerabilidad recibe una prioridad de P1 a P4 con el motivo a la vista.","Cruzamento de NVD, CISA KEV, EPSS e SSVC com sinais de exploit público. Cada vulnerabilidade recebe uma prioridade de P1 a P4 com o motivo à vista.","NVD, CISA KEV, EPSS and SSVC combined with public exploit signals. Every vulnerability gets a P1 to P4 priority with the reason shown."],
+loading:["Cargando datos…","Carregando dados…","Loading data…"],
+load_err:["No se pudieron cargar los datos. Recarga la página.","Não foi possível carregar os dados. Recarregue a página.","Data could not be loaded. Reload the page."],
+chip_cut:["Corte de datos: {d} UTC","Corte de dados: {d} UTC","Data cut: {d} UTC"],chip_epss:["EPSS del {d}","EPSS de {d}","EPSS for {d}"],chip_kev:["Catálogo KEV {v}","Catálogo KEV {v}","KEV catalog {v}"],chip_auto:["Actualización automática cada 3 horas","Atualização automática a cada 3 horas","Updates automatically every 3 hours"],chip_old:["Datos con {h} horas de antigüedad","Dados com {h} horas de defasagem","Data is {h} hours old"],
+theme_d:["Tema oscuro","Tema escuro","Dark theme"],theme_l:["Tema claro","Tema claro","Light theme"],
+pan_eye:["Sección 1","Seção 1","Section 1"],pan_h:["Panorama del año","Panorama do ano","The year at a glance"],
+pan_p:["Cómo va {y}: cuánto se publica, cuánto de eso se explota y con qué rapidez.","Como vai {y}: quanto se publica, quanto disso é explorado e com que rapidez.","How {y} is going: how much is published, how much of it gets exploited, and how fast."],
+k_nvd:["CVE publicadas en NVD en {y}","CVE publicadas na NVD em {y}","CVEs published in NVD in {y}"],k_kev:["Agregadas al KEV en {y}","Adicionadas ao KEV em {y}","Added to KEV in {y}"],k_rw:["De ellas, usadas en ransomware","Delas, usadas em ransomware","Of those, used in ransomware"],k_kevy:["CVE de {y} que ya están en KEV","CVE de {y} que já estão no KEV","{y} CVEs already in KEV"],k_med:["Mediana de días de publicación a KEV","Mediana de dias da publicação ao KEV","Median days from publication to KEV"],k_zero:["Entradas al KEV de día cero","Entradas no KEV de dia zero","Zero-day KEV entries"],k_e10:["CVE con EPSS de 10 % o más","CVE com EPSS de 10 % ou mais","CVEs with EPSS of 10% or more"],
+c_month_h:["CVE publicadas por mes","CVE publicadas por mês","CVEs published per month"],c_month_s:["Barras: total en NVD. Línea: entradas nuevas al KEV ese mes.","Barras: total na NVD. Linha: novas entradas no KEV no mês.","Bars: NVD total. Line: new KEV entries that month."],
+s_nvd:["CVE en NVD","CVE na NVD","CVEs in NVD"],s_kev:["Entradas al KEV","Entradas no KEV","KEV entries"],
+pl_month:["<b>En pocas palabras:</b> este año van {n} CVE y solo {k} entraron al catálogo de explotación activa: {pct} de lo publicado. La lista corta es la que importa.","<b>Em poucas palavras:</b> este ano já são {n} CVE e apenas {k} entraram no catálogo de exploração ativa: {pct} do publicado. A lista curta é a que importa.","<b>In short:</b> {n} CVEs so far this year and only {k} entered the actively exploited catalog: {pct} of what was published. The short list is the one that matters."],
+c_epss_h:["Probabilidad de explotación (EPSS)","Probabilidade de exploração (EPSS)","Exploitation probability (EPSS)"],c_epss_s:["Distribución del puntaje del {d} sobre {n} CVE.","Distribuição da pontuação de {d} sobre {n} CVE.","Score distribution for {d} across {n} CVEs."],
+b0:["Menos de 1 %","Menos de 1 %","Under 1%"],b1:["1 % a 10 %","1 % a 10 %","1% to 10%"],b2:["10 % a 50 %","10 % a 50 %","10% to 50%"],b3:["50 % o más","50 % ou mais","50% or more"],
+pl_epss:["<b>En pocas palabras:</b> {pct} de todas las CVE tiene menos de 1 % de probabilidad de ser explotada en 30 días. Solo {n} superan el 10 %.","<b>Em poucas palavras:</b> {pct} de todas as CVE têm menos de 1 % de probabilidade de exploração em 30 dias. Apenas {n} passam de 10 %.","<b>In short:</b> {pct} of all CVEs have under a 1% chance of exploitation in 30 days. Only {n} exceed 10%."],
+c_speed_h:["Entradas al KEV por mes y velocidad","Entradas no KEV por mês e velocidade","KEV entries per month and speed"],c_speed_s:["Días entre la publicación de la CVE y su entrada al KEV.","Dias entre a publicação da CVE e sua entrada no KEV.","Days between CVE publication and KEV entry."],
+v0:["Día cero","Dia zero","Zero day"],v1:["1 a 7 días","1 a 7 dias","1 to 7 days"],v2:["8 a 30 días","8 a 30 dias","8 to 30 days"],v3:["31 a 365 días","31 a 365 dias","31 to 365 days"],v4:["Más de un año","Mais de um ano","Over a year"],
+pl_speed:["<b>En pocas palabras:</b> de las entradas de {y}, {a} ya se explotaban el día de su publicación o antes, y {b} entraron en la primera semana.","<b>Em poucas palavras:</b> das entradas de {y}, {a} já eram exploradas no dia da publicação ou antes, e {b} entraram na primeira semana.","<b>In short:</b> of the {y} entries, {a} were already exploited on or before publication day, and {b} entered within the first week."],
+c_vend_h:["Proveedores con más entradas al KEV en el año","Fornecedores com mais entradas no KEV no ano","Vendors with most KEV entries this year"],c_vend_s:["En rojo, las usadas en campañas de ransomware.","Em vermelho, as usadas em campanhas de ransomware.","In red, those used in ransomware campaigns."],
+s_rw:["Con ransomware","Com ransomware","With ransomware"],s_norw:["Sin ransomware conocido","Sem ransomware conhecido","No known ransomware"],
+c_tte_h:["Tiempo hasta la explotación","Tempo até a exploração","Time to exploitation"],c_tte_s:["Mediana por trimestre con rango intercuartil. CVE publicadas desde 2021.","Mediana por trimestre com intervalo interquartil. CVE publicadas desde 2021.","Quarterly median with interquartile range. CVEs published since 2021."],
+s_iqr:["Rango intercuartil","Intervalo interquartil","Interquartile range"],s_med:["Mediana (días)","Mediana (dias)","Median (days)"],q:["T","T","Q"],
+pl_tte:["<b>En pocas palabras:</b> en el último trimestre la mediana fue de {m} días. El ingreso al KEV es una cota superior: la explotación real empieza antes de que CISA la registre.","<b>Em poucas palavras:</b> no último trimestre a mediana foi de {m} dias. A entrada no KEV é um limite superior: a exploração real começa antes do registro da CISA.","<b>In short:</b> the median for the latest quarter was {m} days. KEV entry is an upper bound: real exploitation starts before CISA records it."],
+c_chg_h:["Mayores cambios de EPSS en 7 días","Maiores mudanças de EPSS em 7 dias","Largest EPSS changes in 7 days"],c_chg_s:["CVE con EPSS de 10 % o más, antes o ahora.","CVE com EPSS de 10 % ou mais, antes ou agora.","CVEs with EPSS of 10% or more, before or now."],
+c_top_h:["CVE con mayor EPSS","CVE com maior EPSS","Highest EPSS CVEs"],c_top_s:["Las diez con más probabilidad de explotación hoy.","As dez com maior probabilidade de exploração hoje.","The ten most likely to be exploited today."],
+c_last_h:["Últimas entradas al KEV","Últimas entradas no KEV","Latest KEV entries"],c_last_s:["Las diez más recientes. Entran directo a P1.","As dez mais recentes. Entram direto em P1.","The ten most recent. They go straight to P1."],
+pctl:["percentil {p}","percentil {p}","percentile {p}"],added:["alta {d}","inclusão {d}","added {d}"],
+ls_eye:["Sección 2","Seção 2","Section 2"],ls_h:["Lista priorizada","Lista priorizada","Prioritized list"],
+ls_p:["CVE publicadas entre el {a} y el {b} ({n} en total), ordenadas por lo que conviene atender primero.","CVE publicadas entre {a} e {b} ({n} no total), ordenadas pelo que convém tratar primeiro.","CVEs published between {a} and {b} ({n} in total), ordered by what to handle first."],
+k_per:["CVE en el período","CVE no período","CVEs in the period"],k_inkev:["En CISA KEV","No CISA KEV","In CISA KEV"],k_p1:["Prioridad 1","Prioridade 1","Priority 1"],k_p2:["Prioridad 2","Prioridade 2","Priority 2"],k_crit:["CVSS crítico (9 a 10)","CVSS crítico (9 a 10)","Critical CVSS (9 to 10)"],k_x:["Con exploit público","Com exploit público","With public exploit"],
+c_day_h:["Vulnerabilidades por día","Vulnerabilidades por dia","Vulnerabilities per day"],c_day_s:["Apiladas por prioridad con los umbrales actuales.","Empilhadas por prioridade com os limites atuais.","Stacked by priority with the current thresholds."],
+c_heat_h:["Probabilidad frente a severidad","Probabilidade versus severidade","Probability versus severity"],c_heat_s:["Pulsa una celda para filtrar la tabla.","Toque em uma célula para filtrar a tabela.","Select a cell to filter the table."],
+nocvss:["Sin CVSS","Sem CVSS","No CVSS"],
+c_prod_h:["Productos más afectados","Produtos mais afetados","Most affected products"],c_prod_s:["Según CPE de NVD. {pct} de las CVE listadas ya tiene producto asignado.","Segundo CPE da NVD. {pct} das CVE listadas já têm produto atribuído.","From NVD CPE. {pct} of listed CVEs already have a product assigned."],
+c_ctx_h:["Ajusta a tu entorno","Ajuste ao seu ambiente","Fit to your environment"],c_ctx_s:["Los umbrales y el contexto recalculan toda la sección.","Os limites e o contexto recalculam toda a seção.","Thresholds and context recalculate the whole section."],
+f_crit:["Criticidad del activo","Criticidade do ativo","Asset criticality"],o_std:["Estándar","Padrão","Standard"],o_hi:["Crítico","Crítico","Critical"],o_lo:["No crítico","Não crítico","Non-critical"],
+f_exp:["Exposición","Exposição","Exposure"],o_na:["Sin especificar","Não especificada","Unspecified"],o_net:["Expuesto a internet","Exposto à internet","Internet-facing"],o_int:["Solo interno","Somente interno","Internal only"],
+lb_t1:["Umbral EPSS para P1: {v} %","Limite EPSS para P1: {v} %","EPSS threshold for P1: {v}%"],lb_t2:["Umbral EPSS para P2: {v} %","Limite EPSS para P2: {v} %","EPSS threshold for P2: {v}%"],
+ctx_note:["El contexto mueve la prioridad <b>un nivel como máximo</b>. P1 no cambia, nada sube a P1 solo por contexto y las CVE con señales de explotación no bajan.","O contexto move a prioridade <b>no máximo um nível</b>. P1 não muda, nada sobe para P1 só pelo contexto e as CVE com sinais de exploração não descem.","Context moves priority by <b>one level at most</b>. P1 never changes, nothing reaches P1 on context alone, and CVEs with exploitation signals are never lowered."],
+f_search:["Buscar CVE, proveedor o producto","Buscar CVE, fornecedor ou produto","Search CVE, vendor or product"],f_prio:["Prioridad","Prioridade","Priority"],o_allp:["Todas","Todas","All"],f_sev:["Severidad","Severidade","Severity"],o_alls:["Toda severidad","Toda severidade","Any severity"],o_nocvss:["Sin CVSS","Sem CVSS","No CVSS"],
+f_kev:["Solo KEV","Somente KEV","KEV only"],f_x:["Con exploit público","Com exploit público","With public exploit"],f_chg:["EPSS cambió en 7 días","EPSS mudou em 7 dias","EPSS changed in 7 days"],
+b_reset:["Limpiar filtros","Limpar filtros","Clear filters"],b_copy:["Copiar tabla","Copiar tabela","Copy table"],b_csv:["Descargar CSV","Baixar CSV","Download CSV"],b_prev:["Anterior","Anterior","Previous"],b_next:["Siguiente","Próxima","Next"],b_copysum:["Copiar resumen","Copiar resumo","Copy summary"],
+th_p:["Prioridad","Prioridade","Priority"],th_cve:["CVE","CVE","CVE"],th_pub:["Publicada","Publicada","Published"],th_cvss:["CVSS","CVSS","CVSS"],th_epss:["EPSS","EPSS","EPSS"],th_sig:["Señales","Sinais","Signals"],th_prod:["Proveedor y producto","Fornecedor e produto","Vendor and product"],th_why:["Motivo","Motivo","Reason"],th_desc:["Descripción","Descrição","Description"],
+pg:["{a} a {b} de {n}","{a} a {b} de {n}","{a} to {b} of {n}"],none:["Ninguna CVE coincide con los filtros.","Nenhuma CVE corresponde aos filtros.","No CVE matches the filters."],
+ls_note:["La tabla lista todas las P1 a P3 y las P4 con alguna señal ({a}). Las demás P4 ({b}) se cuentan en los indicadores pero no se listan.","A tabela lista todas as P1 a P3 e as P4 com algum sinal ({a}). As demais P4 ({b}) são contadas nos indicadores, mas não listadas.","The table lists every P1 to P3 and the P4s with some signal ({a}). The remaining P4s ({b}) are counted in the indicators but not listed."],
+r_kev:["Está en CISA KEV: se explota activamente.","Está no CISA KEV: é explorada ativamente.","Listed in CISA KEV: actively exploited."],r_ssvca:["SSVC de CISA reporta explotación activa.","O SSVC da CISA reporta exploração ativa.","CISA SSVC reports active exploitation."],r_e1:["EPSS de {e} supera el umbral de P1 ({t} %).","EPSS de {e} supera o limite de P1 ({t} %).","EPSS of {e} exceeds the P1 threshold ({t}%)."],r_e2:["EPSS de {e} supera el umbral de P2 ({t} %).","EPSS de {e} supera o limite de P2 ({t} %).","EPSS of {e} exceeds the P2 threshold ({t}%)."],r_c9:["CVSS de {c} con EPSS de 1 % o más.","CVSS de {c} com EPSS de 1 % ou mais.","CVSS of {c} with EPSS of 1% or more."],r_ssvcp:["SSVC: prueba de concepto pública y explotación automatizable.","SSVC: prova de conceito pública e exploração automatizável.","SSVC: public proof of concept and automatable exploitation."],r_c7:["CVSS de {c} (alto o crítico) sin señales de explotación.","CVSS de {c} (alto ou crítico) sem sinais de exploração.","CVSS of {c} (high or critical) with no exploitation signals."],r_p90:["Percentil EPSS de 90 o más.","Percentil EPSS de 90 ou mais.","EPSS percentile of 90 or higher."],r_rest:["Sin señales de explotación ni severidad alta: mantenimiento de rutina.","Sem sinais de exploração nem severidade alta: manutenção de rotina.","No exploitation signals or high severity: routine maintenance."],
+r_up:["Subió un nivel por el contexto elegido.","Subiu um nível pelo contexto escolhido.","Raised one level by the selected context."],r_dn:["Bajó un nivel por el contexto elegido.","Desceu um nível pelo contexto escolhido.","Lowered one level by the selected context."],
+x_n:["Nuclei","Nuclei","Nuclei"],x_m:["Metasploit","Metasploit","Metasploit"],x_e:["Exploit-DB","Exploit-DB","Exploit-DB"],rw:["Ransomware","Ransomware","Ransomware"],
+ssvc_l:["SSVC: explotación {e}, automatizable {a}, impacto técnico {t}.","SSVC: exploração {e}, automatizável {a}, impacto técnico {t}.","SSVC: exploitation {e}, automatable {a}, technical impact {t}."],
+se_A:["activa","ativa","active"],se_P:["con prueba de concepto","com prova de conceito","proof of concept"],se_N:["ninguna","nenhuma","none"],sa_Y:["sí","sim","yes"],sa_N:["no","não","no"],st_T:["total","total","total"],st_P:["parcial","parcial","partial"],
+d7:["Cambio de EPSS en 7 días: {d} puntos.","Mudança de EPSS em 7 dias: {d} pontos.","EPSS change in 7 days: {d} points."],
+orig:["Texto original de la fuente (en inglés).","Texto original da fonte (em inglês).","Original source text."],nodesc:["Sin descripción en la fuente.","Sem descrição na fonte.","No description from the source."],
+see_nvd:["Ver en NVD","Ver na NVD","View in NVD"],see_vrx:["Remediar con vRx","Remediar com vRx","Remediate with vRx"],
+sm_eye:["Sección 3","Seção 3","Section 3"],sm_h:["Resúmenes para compartir","Resumos para compartilhar","Summaries to share"],sm_p:["Listos para pegar en un correo o un chat. Usan días completos en UTC.","Prontos para colar em um e-mail ou chat. Usam dias completos em UTC.","Ready to paste into an email or chat. They use full UTC days."],
+sm_d:["Último día completo","Último dia completo","Latest full day"],sm_w:["Últimos 7 días","Últimos 7 dias","Last 7 days"],
+sum_t:["Vulnerabilidades · {a}","Vulnerabilidades · {a}","Vulnerabilities · {a}"],sum_r:["{a} a {b}","{a} a {b}","{a} to {b}"],
+sum_1:["Publicadas en NVD: {n}","Publicadas na NVD: {n}","Published in NVD: {n}"],sum_2:["Críticas (CVSS 9 o más): {n}","Críticas (CVSS 9 ou mais): {n}","Critical (CVSS 9 or higher): {n}"],sum_3:["Nuevas en CISA KEV: {n}","Novas no CISA KEV: {n}","New in CISA KEV: {n}"],sum_4:["Prioridad 1: {a} · Prioridad 2: {b}","Prioridade 1: {a} · Prioridade 2: {b}","Priority 1: {a} · Priority 2: {b}"],sum_5:["Atender primero:","Tratar primeiro:","Handle first:"],sum_6:["Fuente: NVD, CISA KEV, EPSS, SSVC. Corte {d} UTC.","Fonte: NVD, CISA KEV, EPSS, SSVC. Corte {d} UTC.","Source: NVD, CISA KEV, EPSS, SSVC. Cut {d} UTC."],sum_none:["Sin P1 ni P2 en el intervalo.","Sem P1 nem P2 no intervalo.","No P1 or P2 in the interval."],
+rg_eye:["Sección 4","Seção 4","Section 4"],rg_h:["Ransomware en las Américas","Ransomware nas Américas","Ransomware in the Americas"],rg_p:["Organizaciones publicadas en sitios de filtración en {y}, por país. Son conteos de lo que los grupos anuncian, no el total de incidentes.","Organizações publicadas em sites de vazamento em {y}, por país. São contagens do que os grupos anunciam, não o total de incidentes.","Organizations posted on leak sites in {y}, by country. These are counts of what groups announce, not total incidents."],
+rg_all:["Todas las Américas","Todas as Américas","All the Americas"],rg_na:["Norteamérica","América do Norte","North America"],rg_ca:["Centroamérica y el Caribe","América Central e Caribe","Central America and the Caribbean"],rg_sa:["Sudamérica","América do Sul","South America"],
+rg_k1:["Víctimas publicadas en {y}","Vítimas publicadas em {y}","Victims posted in {y}"],rg_k2:["Países con víctimas","Países com vítimas","Countries with victims"],rg_k3:["Grupo más activo","Grupo mais ativo","Most active group"],rg_k4:["Mes con más publicaciones","Mês com mais publicações","Month with most postings"],
+rg_rank:["Víctimas por país","Vítimas por país","Victims by country"],rg_pick:["Pulsa un país para ver su detalle. Pulsa de nuevo para volver a la región.","Toque em um país para ver o detalhe. Toque de novo para voltar à região.","Select a country for its detail. Select again to return to the region."],
+rg_n:["víctimas publicadas","vítimas publicadas","victims posted"],rg_g:["Grupos más activos","Grupos mais ativos","Most active groups"],rg_m:["Publicaciones por mes","Publicações por mês","Postings by month"],rg_no:["Sin víctimas publicadas en el año.","Sem vítimas publicadas no ano.","No victims posted this year."],
+mt_eye:["Sección 5","Seção 5","Section 5"],mt_h:["Metodología","Metodologia","Methodology"],mt_p:["Un árbol de decisión de preguntas de sí o no. La primera respuesta afirmativa define la prioridad.","Uma árvore de decisão de perguntas de sim ou não. A primeira resposta afirmativa define a prioridade.","A decision tree of yes or no questions. The first yes sets the priority."],
+ru1:["Atender ya","Tratar já","Act now"],ru2:["Prioridad alta","Prioridade alta","High priority"],ru3:["Planificada","Planejada","Planned"],ru4:["Rutina","Rotina","Routine"],
+ru1a:["Está en CISA KEV","Está no CISA KEV","Listed in CISA KEV"],ru1b:["SSVC con explotación activa","SSVC com exploração ativa","SSVC with active exploitation"],ru1c:["EPSS igual o mayor al umbral de P1","EPSS igual ou maior que o limite de P1","EPSS at or above the P1 threshold"],
+ru2a:["EPSS igual o mayor al umbral de P2","EPSS igual ou maior que o limite de P2","EPSS at or above the P2 threshold"],ru2b:["CVSS de 9 o más con EPSS de 1 % o más","CVSS de 9 ou mais com EPSS de 1 % ou mais","CVSS 9 or higher with EPSS of 1% or more"],ru2c:["SSVC con prueba de concepto y explotación automatizable","SSVC com prova de conceito e exploração automatizável","SSVC with proof of concept and automatable exploitation"],
+ru3a:["CVSS de 7 o más","CVSS de 7 ou mais","CVSS 7 or higher"],ru3b:["Percentil EPSS de 90 o más","Percentil EPSS de 90 ou mais","EPSS percentile of 90 or higher"],ru4a:["Todo lo demás: ciclo normal de parcheo","Todo o resto: ciclo normal de correção","Everything else: normal patch cycle"],
+mt_src:["Fuentes","Fontes","Sources"],
+s1:["NVD (NIST)","NVD (NIST)","NVD (NIST)"],s1d:["Catálogo de CVE con CVSS, CPE y fechas. {n} peticiones en este corte.","Catálogo de CVE com CVSS, CPE e datas. {n} requisições neste corte.","CVE catalog with CVSS, CPE and dates. {n} requests in this snapshot."],
+s2:["CISA KEV","CISA KEV","CISA KEV"],s2d:["Vulnerabilidades con explotación confirmada. {n} entradas, catálogo {v}.","Vulnerabilidades com exploração confirmada. {n} entradas, catálogo {v}.","Vulnerabilities with confirmed exploitation. {n} entries, catalog {v}."],
+s3:["EPSS (FIRST)","EPSS (FIRST)","EPSS (FIRST)"],s3d:["Probabilidad de explotación en 30 días. Modelo {m}, puntaje del {d}.","Probabilidade de exploração em 30 dias. Modelo {m}, pontuação de {d}.","Probability of exploitation in 30 days. Model {m}, scores for {d}."],
+s4:["SSVC (CISA Vulnrichment)","SSVC (CISA Vulnrichment)","SSVC (CISA Vulnrichment)"],s4d:["Explotación, automatización e impacto. Consultadas {a} CVE, {b} con datos.","Exploração, automação e impacto. Consultadas {a} CVE, {b} com dados.","Exploitation, automation and impact. {a} CVEs queried, {b} with data."],
+s5:["Exploit público","Exploit público","Public exploit"],s5d:["Nuclei ({a} CVE), Metasploit ({b}) y Exploit-DB ({c}).","Nuclei ({a} CVE), Metasploit ({b}) e Exploit-DB ({c}).","Nuclei ({a} CVEs), Metasploit ({b}) and Exploit-DB ({c})."],
+s6:["Ransomware por país","Ransomware por país","Ransomware by country"],s6d:["ransomware.live, solo conteos agregados por país y grupo.","ransomware.live, apenas contagens agregadas por país e grupo.","ransomware.live, aggregate counts by country and group only."],
+mt_lim:["<b>Límites a tener presentes:</b> EPSS estima probabilidad, no confirma explotación. El KEV refleja lo que CISA ha verificado, así que es una cota inferior de lo explotado. La NVD tarda en asignar CVSS y producto a las CVE recientes: una CVE sin CVSS no es una CVE sin riesgo.","<b>Limites a considerar:</b> o EPSS estima probabilidade, não confirma exploração. O KEV reflete o que a CISA verificou, portanto é um limite inferior do que é explorado. A NVD demora para atribuir CVSS e produto às CVE recentes: uma CVE sem CVSS não é uma CVE sem risco.","<b>Limits to keep in mind:</b> EPSS estimates probability, it does not confirm exploitation. KEV reflects what CISA has verified, so it is a lower bound of what is exploited. NVD takes time to assign CVSS and product to recent CVEs: a CVE with no CVSS is not a CVE with no risk."],
+cta_h:["Priorizar es la mitad. La otra mitad es remediar.","Priorizar é metade. A outra metade é remediar.","Prioritizing is half the job. The other half is remediation."],
+cta_p:["Saber qué parchear primero no reduce el riesgo hasta que se corrige. La plataforma de Vicarius cubre el ciclo completo, del descubrimiento al retorno de la inversión, con tres productos que trabajan juntos.","Saber o que corrigir primeiro não reduz o risco até que seja corrigido. A plataforma da Vicarius cobre o ciclo completo, da descoberta ao retorno do investimento, com três produtos que trabalham juntos.","Knowing what to patch first does not reduce risk until it is fixed. The Vicarius platform covers the full cycle, from discovery to return on investment, with three products that work together."],
+cta_b:["Solicitar una demo","Solicitar uma demo","Request a demo"],
+fl1:["Descubrir","Descobrir","Discover"],fl2:["Priorizar","Priorizar","Prioritize"],fl3:["Remediar","Remediar","Remediate"],fl4:["Medir","Medir","Measure"],
+pr1_r:["Remediación","Remediação","Remediation"],pr1_d:["Detecta, prioriza y remedia vulnerabilidades en Windows, Linux y macOS, de forma manual o automatizada.","Detecta, prioriza e remedia vulnerabilidades em Windows, Linux e macOS, de forma manual ou automatizada.","Detects, prioritizes and remediates vulnerabilities on Windows, Linux and macOS, manually or automatically."],
+pr1_a:["Parcheo de sistemas operativos y aplicaciones de terceros","Correção de sistemas operacionais e aplicações de terceiros","Patching for operating systems and third-party applications"],pr1_b:["Motor de scripts para vulnerabilidades de configuración","Motor de scripts para vulnerabilidades de configuração","Scripting engine for configuration-based vulnerabilities"],pr1_c:["Protección sin parche cuando aún no existe corrección","Proteção sem patch quando ainda não há correção","Patchless protection when no fix exists yet"],
+pr2_r:["Visibilidad y cumplimiento","Visibilidade e conformidade","Visibility and compliance"],pr2_d:["Escanea la red, mantiene el inventario de activos y mide el cumplimiento frente a CIS y otros marcos.","Escaneia a rede, mantém o inventário de ativos e mede a conformidade com o CIS e outros marcos.","Scans the network, keeps the asset inventory and measures compliance against CIS and other frameworks."],
+pr2_a:["Escaneo de redes para ver lo que está conectado","Varredura de redes para ver o que está conectado","Network scanning to see what is connected"],pr2_b:["Inventario de activos siempre actualizado","Inventário de ativos sempre atualizado","An asset inventory that stays up to date"],pr2_c:["Cumplimiento frente a CIS, PCI, HIPAA y CMMC","Conformidade com CIS, PCI, HIPAA e CMMC","Compliance against CIS, PCI, HIPAA and CMMC"],
+pr3_r:["Inteligencia y retorno","Inteligência e retorno","Intelligence and return"],pr3_d:["Correlaciona las vulnerabilidades y calcula un ROI real, con costos ajustados a cada compañía.","Correlaciona as vulnerabilidades e calcula um ROI real, com custos ajustados a cada empresa.","Correlates vulnerabilities and calculates a real ROI, with costs adjusted to each company."],
+pr3_a:["Vulnerabilidades, activos y parches correlacionados en una vista","Vulnerabilidades, ativos e correções correlacionados em uma visão","Vulnerabilities, assets and patches correlated in one view"],pr3_b:["ROI calculado con los costos de tu compañía","ROI calculado com os custos da sua empresa","ROI calculated with your company's own costs"],pr3_c:["Cifras para sustentar la inversión ante la dirección","Números para sustentar o investimento perante a diretoria","Figures to back the investment in front of leadership"],
+pr1_e:["Ejecución manual o por políticas automáticas","Execução manual ou por políticas automáticas","Run manually or through automated policies"],pr2_e:["Brechas de configuración frente a los controles CIS","Lacunas de configuração frente aos controles CIS","Configuration gaps against CIS controls"],pr3_e:["Seguimiento del riesgo y del avance en el tiempo","Acompanhamento do risco e do avanço ao longo do tempo","Risk and progress tracked over time"],
+ft_l:["Datos de fuentes públicas. Corte {d} UTC.","Dados de fontes públicas. Corte {d} UTC.","Data from public sources. Cut {d} UTC."],ft_r:["Vicarius · vicarius.io","Vicarius · vicarius.io","Vicarius · vicarius.io"],
+copied:["Copiado","Copiado","Copied"],nocopy:["No se pudo copiar. Selecciona el texto y cópialo.","Não foi possível copiar. Selecione o texto e copie.","Could not copy. Select the text and copy it."],saved:["Archivo generado","Arquivo gerado","File generated"],
+days:["días","dias","days"],entries:["entradas","entradas","entries"]
+};
+const LANGS=["es","pt","en"],LOC={es:"es-CO",pt:"pt-BR",en:"en-US"};
+let lang="es",D=null,charts=[];
+const S={q:"",p:"",s:"",kev:false,x:false,chg:false,crit:"std",exp:"na",t1:.5,t2:.1,page:0,open:null,hm:null,prod:null,reg:"all",cc:null};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const t=(k,p)=>{let s=(T[k]||[k,k,k])[LANGS.indexOf(lang)];if(p)for(const a in p)s=s.split("{"+a+"}").join(p[a]);return s};
+const nf=(n,d=0)=>new Intl.NumberFormat(LOC[lang],{maximumFractionDigits:d,minimumFractionDigits:d}).format(n);
+const pc=(x,d=1)=>new Intl.NumberFormat(LOC[lang],{style:"percent",maximumFractionDigits:d,minimumFractionDigits:d}).format(x);
+const dfm=(s,o)=>new Intl.DateTimeFormat(LOC[lang],Object.assign({timeZone:"UTC"},o||{day:"2-digit",month:"short",year:"numeric"})).format(new Date(s.length<=10?s+"T00:00:00Z":s));
+const dtm=s=>dfm(s,{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit",hour12:false});
+const mon=k=>new Intl.DateTimeFormat(LOC[lang],{timeZone:"UTC",month:"short"}).format(new Date(k+"-15T00:00:00Z"));
+const dd=(a,b)=>Math.round((Date.parse(b)-Date.parse(a))/864e5);
+const med=a=>{if(!a.length)return null;const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2};
+const qt=(a,q)=>{const s=[...a].sort((x,y)=>x-y),i=(s.length-1)*q,lo=Math.floor(i);return s[lo]+(s[Math.min(lo+1,s.length-1)]-s[lo])*(i-lo)};
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function toast(m){const e=$("toast");e.textContent=m;e.classList.add("on");clearTimeout(toast.h);toast.h=setTimeout(()=>e.classList.remove("on"),1800)}
+async function copyText(s){try{await navigator.clipboard.writeText(s);toast(t("copied"))}catch(e){toast(t("nocopy"))}}
+
+/* ---------- Prioridad ---------- */
+// fila: 0 id,1 pub,2 cvss,3 sev,4 epss,5 pct,6 kev,7 rw,8 vendor,9 product,10 en,11 es,12 ssvc,13 xflag,14 d7
+function prio(r){
+  const e=r[4]||0,c=r[2]||0,sv=(r[12]||"").split("/");let p,k,sig=false;
+  if(r[6]){p=1;k="r_kev";sig=true}
+  else if(sv[0]==="A"){p=1;k="r_ssvca";sig=true}
+  else if(e>=S.t1){p=1;k="r_e1";sig=true}
+  else if(e>=S.t2){p=2;k="r_e2";sig=true}
+  else if(c>=9&&e>=.01){p=2;k="r_c9"}
+  else if(sv[0]==="P"&&sv[1]==="Y"){p=2;k="r_ssvcp";sig=true}
+  else if(c>=7){p=3;k="r_c7"}
+  else if((r[5]||0)>=.9){p=3;k="r_p90"}
+  else{p=4;k="r_rest"}
+  let adj=0;
+  if(p>1){
+    let d=(S.crit==="hi"?-1:S.crit==="lo"?1:0)+(S.exp==="net"?-1:S.exp==="int"?1:0);
+    d=Math.max(-1,Math.min(1,d));
+    if(d>0&&sig)d=0;
+    const np=Math.max(2,Math.min(4,p+d));adj=np-p;p=np;
+  }
+  return {p,k,adj};
+}
+function reason(r,pr){
+  let s=t(pr.k,{e:pc(r[4]||0),t:nf((pr.k==="r_e1"?S.t1:S.t2)*100),c:nf(r[2]||0,1)});
+  if(pr.adj<0)s+=" "+t("r_up");if(pr.adj>0)s+=" "+t("r_dn");return s;
+}
+const sevOf=r=>r[3]||"NONE";
+const band=e=>e==null||e<.01?0:e<.1?1:e<.5?2:3;
+let ROWS=[];
+function compute(){ROWS=D.filas.map(r=>{const pr=prio(r);return {r,pr}});ROWS.sort((a,b)=>a.pr.p-b.pr.p||(b.r[4]||0)-(a.r[4]||0)||(b.r[2]||0)-(a.r[2]||0)||(a.r[0]<b.r[0]?1:-1))}
+function filtered(){
+  const q=S.q.trim().toLowerCase();
+  return ROWS.filter(({r,pr})=>{
+    if(S.p&&pr.p!==+S.p)return false;
+    if(S.s&&sevOf(r)!==S.s)return false;
+    if(S.kev&&!r[6])return false;
+    if(S.x&&!r[13])return false;
+    if(S.chg&&!(r[14]!=null&&Math.abs(r[14])>=.01))return false;
+    if(S.hm&&(band(r[4])!==S.hm.b||sevOf(r)!==S.hm.s))return false;
+    if(S.prod&&(r[8]+" "+r[9])!==S.prod)return false;
+    if(q&&!(r[0].toLowerCase().includes(q)||(r[8]+" "+r[9]).toLowerCase().includes(q)))return false;
+    return true;
+  });
+}
+
+/* ---------- Gráficos ---------- */
+function mk(id,cfg){const c=new Chart($(id),cfg);charts.push(c);return c}
+function baseOpts(extra){
+  const ink=css("--ink2"),line=css("--line");
+  Chart.defaults.font.family=css("--font");Chart.defaults.font.size=12;Chart.defaults.color=ink;
+  const o={responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false},
+    plugins:{legend:{position:"bottom",labels:{boxWidth:10,boxHeight:10,usePointStyle:true,padding:14}},tooltip:{callbacks:{}}},
+    scales:{x:{grid:{display:false},border:{color:line},ticks:{maxRotation:0,autoSkipPadding:10}},y:{grid:{color:line},border:{display:false},beginAtZero:true,ticks:{callback:v=>nf(v)}}}};
+  return Object.assign(o,extra||{});
+}
+function drawCharts(){
+  charts.forEach(c=>c.destroy());charts=[];
+  const A=css("--accent"),AM=css("--accent-mid"),P1=css("--p1"),P2=css("--p2"),P3=css("--p3"),P4=css("--p4b"),INK=css("--ink");
+  const y=String(D.anio),months=Object.keys(D.cvePorMes).sort();
+  const kevY=D.kev.filter(k=>k[4].startsWith(y));
+  // 1 CVE por mes
+  mk("chMonth",{data:{labels:months.map(mon),datasets:[
+    {type:"line",label:t("s_kev"),data:months.map(m=>kevY.filter(k=>k[4].startsWith(m)).length),borderColor:P1,backgroundColor:P1,yAxisID:"y2",tension:.3,pointRadius:3,borderWidth:2},
+    {type:"bar",label:t("s_nvd"),data:months.map(m=>D.cvePorMes[m]),backgroundColor:A,borderRadius:5,maxBarThickness:36}]},
+    options:baseOpts({scales:{x:{grid:{display:false},border:{color:css("--line")}},y:{grid:{color:css("--line")},border:{display:false},beginAtZero:true,ticks:{callback:v=>nf(v)}},y2:{position:"right",beginAtZero:true,grid:{display:false},border:{display:false},ticks:{color:P1,precision:0}}}})});
+  // 2 EPSS
+  mk("chEpss",{type:"bar",data:{labels:[t("b0"),t("b1"),t("b2"),t("b3")],datasets:[{label:"CVE",data:D.epss.bandas,backgroundColor:[AM,A,P3,P1],borderRadius:6,maxBarThickness:60}]},
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:{grid:{display:false},border:{color:css("--line")}},y:{type:"logarithmic",grid:{color:css("--line")},border:{display:false},ticks:{callback:v=>{const l=Math.log10(v);return Math.abs(l-Math.round(l))<1e-6?nf(v):""}}}}})});
+  // 3 velocidad
+  const bk=d=>d<=0?0:d<=7?1:d<=30?2:d<=365?3:4,cols=[P1,P2,P3,A,P4];
+  const sp=months.map(m=>{const a=[0,0,0,0,0];kevY.filter(k=>k[4].startsWith(m)&&k[5]).forEach(k=>a[bk(dd(k[5],k[4]))]++);return a});
+  mk("chSpeed",{type:"bar",data:{labels:months.map(mon),datasets:[0,1,2,3,4].map(i=>({label:t("v"+i),data:sp.map(a=>a[i]),backgroundColor:cols[i],borderRadius:3,maxBarThickness:36}))},
+    options:baseOpts({scales:{x:{stacked:true,grid:{display:false},border:{color:css("--line")}},y:{stacked:true,grid:{color:css("--line")},border:{display:false},ticks:{precision:0}}}})});
+  // 4 proveedores
+  const vm={};kevY.forEach(k=>{const v=vm[k[1]]||(vm[k[1]]=[0,0]);v[k[6]?0:1]++});
+  const vs=Object.entries(vm).sort((a,b)=>(b[1][0]+b[1][1])-(a[1][0]+a[1][1])).slice(0,10);
+  mk("chVend",{type:"bar",data:{labels:vs.map(v=>v[0]),datasets:[{label:t("s_rw"),data:vs.map(v=>v[1][0]),backgroundColor:P1,borderRadius:3},{label:t("s_norw"),data:vs.map(v=>v[1][1]),backgroundColor:A,borderRadius:3}]},
+    options:baseOpts({indexAxis:"y",scales:{x:{stacked:true,grid:{color:css("--line")},border:{display:false},ticks:{precision:0}},y:{stacked:true,grid:{display:false},border:{color:css("--line")}}}})});
+  // 5 tiempo hasta explotación
+  const qk=d=>d.slice(0,4)+"-"+t("q")+(Math.floor((+d.slice(5,7)-1)/3)+1),qm={};
+  D.kev.forEach(k=>{if(k[5]&&k[5]>="2021-01-01"&&k[4]>="2023-01-01"){(qm[qk(k[4])]||(qm[qk(k[4])]=[])).push(Math.max(0,dd(k[5],k[4])))}});
+  const qs=Object.keys(qm).sort();
+  mk("chTte",{data:{labels:qs,datasets:[
+    {type:"line",label:t("s_med"),data:qs.map(q=>med(qm[q])),borderColor:INK,backgroundColor:INK,tension:.25,pointRadius:3,borderWidth:2},
+    {type:"bar",label:t("s_iqr"),data:qs.map(q=>[qt(qm[q],.25),qt(qm[q],.75)]),backgroundColor:AM,borderRadius:4,maxBarThickness:30}]},
+    options:baseOpts({plugins:{legend:{position:"bottom",labels:{boxWidth:10,boxHeight:10,usePointStyle:true,padding:14}},tooltip:{callbacks:{label:c=>c.dataset.type==="bar"?`${c.dataset.label}: ${nf(c.raw[0])} – ${nf(c.raw[1])} ${t("days")}`:`${c.dataset.label}: ${nf(c.raw,1)}`}}}})});
+  drawTteText(qs,qm);
+  drawDay();
+  renderRegion();
+}
+function drawTteText(qs,qm){$("pl_tte").innerHTML=t("pl_tte",{m:"<b>"+nf(med(qm[qs[qs.length-1]]),1)+"</b>"})}
+function drawDay(){
+  const i=charts.findIndex(c=>c.canvas.id==="chDay");if(i>=0){charts[i].destroy();charts.splice(i,1)}
+  const days={};const add=(d,p,n)=>{(days[d]||(days[d]=[0,0,0,0]))[p-1]+=n};
+  ROWS.forEach(({r,pr})=>add(r[1].slice(0,10),pr.p,1));
+  Object.entries(D.resto.porDia).forEach(([d,n])=>add(d,4,n));
+  const ks=Object.keys(days).sort(),cols=[css("--p1"),css("--p2"),css("--p3"),css("--p4b")];
+  mk("chDay",{type:"bar",data:{labels:ks.map(k=>dfm(k,{day:"2-digit",month:"short"})),datasets:[0,1,2,3].map(j=>({label:"P"+(j+1),data:ks.map(k=>days[k][j]),backgroundColor:cols[j],borderRadius:2}))},
+    options:baseOpts({scales:{x:{stacked:true,grid:{display:false},border:{color:css("--line")},ticks:{maxRotation:0,autoSkipPadding:14}},y:{stacked:true,grid:{color:css("--line")},border:{display:false},ticks:{callback:v=>nf(v)}}}})});
+}
+
+/* ---------- Render ---------- */
+function kpi(v,k,hot){return `<div class="kpi${hot?" hot":""}"><div class="v num">${esc(v)}</div><div class="k">${esc(k)}</div></div>`}
+function xtags(f){return (f&1?`<span class="tag x">${t("x_n")}</span> `:"")+(f&2?`<span class="tag x">${t("x_m")}</span> `:"")+(f&4?`<span class="tag x">${t("x_e")}</span> `:"")}
+function nvdLink(id){return `<a class="mono" href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(id)}" target="_blank" rel="noopener">${esc(id)}</a>`}
+function renderStatic(){
+  document.documentElement.lang=lang;
+  document.querySelectorAll("[data-i18n]").forEach(e=>e.textContent=t(e.dataset.i18n,{y:D?D.anio:""}));
+  document.querySelectorAll("[data-i18n-html]").forEach(e=>e.innerHTML=t(e.dataset.i18nHtml));
+  document.querySelectorAll("#langs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.lang===lang));
+  const dark=css("--logo-dark")==="block";$("theme").textContent=t(dark?"theme_l":"theme_d");
+  document.title={es:"Priorización de vulnerabilidades Vicarius",pt:"Priorização de vulnerabilidades Vicarius",en:"Vicarius vulnerability prioritization"}[lang];
+}
+function renderPanorama(){
+  const y=String(D.anio),kevY=D.kev.filter(k=>k[4].startsWith(y)),tot=Object.values(D.cvePorMes).reduce((a,b)=>a+b,0);
+  const ds=kevY.filter(k=>k[5]).map(k=>Math.max(0,dd(k[5],k[4]))),zero=kevY.filter(k=>k[5]&&dd(k[5],k[4])<=0).length,wk=kevY.filter(k=>k[5]&&dd(k[5],k[4])>0&&dd(k[5],k[4])<=7).length;
+  $("chips").innerHTML=`<span class="chip"><span class="dot"></span>${esc(t("chip_cut",{d:dtm(D.generado)}))}</span><span class="chip">${esc(t("chip_epss",{d:dfm(D.epss.fecha)}))}</span><span class="chip">${esc(t("chip_kev",{v:D.kevCatalogo.version}))}</span>${(()=>{const h=Math.floor((Date.now()-Date.parse(D.generado))/36e5);return h>=8?`<span class="chip warn"><span class="dot"></span>${esc(t("chip_old",{h:nf(h)}))}</span>`:`<span class="chip"><span class="dot"></span>${esc(t("chip_auto"))}</span>`})()}`;
+  $("kpis").innerHTML=kpi(nf(tot),t("k_nvd",{y}))+kpi(nf(kevY.length),t("k_kev",{y}),1)+kpi(nf(kevY.filter(k=>k[6]).length),t("k_rw"))+kpi(nf(D.kev.filter(k=>k[5].startsWith(y)).length),t("k_kevy",{y}))+kpi(nf(med(ds),1),t("k_med"))+kpi(nf(zero),t("k_zero"),1)+kpi(nf(D.epss.ge10),t("k_e10"));
+  $("pl_month").innerHTML=t("pl_month",{n:"<b>"+nf(tot)+"</b>",k:"<b>"+nf(kevY.length)+"</b>",pct:"<b>"+pc(kevY.length/tot,2)+"</b>"});
+  $("c_epss_s").textContent=t("c_epss_s",{d:dfm(D.epss.fecha),n:nf(D.epss.total)});
+  $("pl_epss").innerHTML=t("pl_epss",{pct:"<b>"+pc(D.epss.bandas[0]/D.epss.total)+"</b>",n:"<b>"+nf(D.epss.ge10)+"</b>"});
+  $("pl_speed").innerHTML=t("pl_speed",{y,a:"<b>"+nf(zero)+"</b>",b:"<b>"+nf(wk)+"</b>"});
+  $("lsChg").innerHTML=D.epss.cambios.slice(0,10).map(c=>{const d=c[1]-c[2];return `<div class="row"><span class="${d>0?"up":"down"}">${d>0?"▲":"▼"}</span><span class="t">${nvdLink(c[0])} ${c[3]?'<span class="tag kev">KEV</span>':""}<small class="num">${pc(c[2])} → ${pc(c[1])}</small></span><span class="num ${d>0?"up":"down"}">${d>0?"+":"−"}${nf(Math.abs(d)*100,1)}</span></div>`}).join("");
+  $("lsTop").innerHTML=D.epss.top.slice(0,10).map((c,i)=>`<div class="row"><span class="num" style="color:var(--ink3)">${i+1}</span><span class="t">${nvdLink(c[0])} ${c[3]?'<span class="tag kev">KEV</span> ':""}${xtags(c[4])}<small>${esc(t("pctl",{p:nf(c[2]*100,2)}))}</small></span><span class="num"><b>${pc(c[1],2)}</b></span></div>`).join("");
+  $("lsLast").innerHTML=D.kev.slice(-10).reverse().map(k=>`<div class="row"><span class="pill p1">P1</span><span class="t">${nvdLink(k[0])} ${k[6]?`<span class="tag rw">${t("rw")}</span>`:""}<small>${esc(k[1])} · ${esc(k[3])}</small></span><span class="num" style="color:var(--ink3);font-size:12.5px">${esc(dfm(k[4],{day:"2-digit",month:"short"}))}</span></div>`).join("");
+}
+function renderList(){
+  const P=D.periodo,rest=Object.values(D.resto.porDia).reduce((a,b)=>a+b,0),cnt=[0,0,0,0];ROWS.forEach(x=>cnt[x.pr.p-1]++);
+  $("ls_p").textContent=t("ls_p",{a:dfm(P.desde),b:dfm(P.hasta),n:nf(P.total)});
+  $("kpis2").innerHTML=kpi(nf(P.total),t("k_per"))+kpi(nf(cnt[0]),t("k_p1"),1)+kpi(nf(cnt[1]),t("k_p2"))+kpi(nf(D.filas.filter(r=>r[6]).length),t("k_inkev"))+kpi(nf(D.filas.filter(r=>(r[2]||0)>=9).length),t("k_crit"))+kpi(nf(D.filas.filter(r=>r[13]).length),t("k_x"));
+  $("lb_t1").textContent=t("lb_t1",{v:nf(S.t1*100)});$("lb_t2").textContent=t("lb_t2",{v:nf(S.t2*100)});
+  // mapa de calor
+  const sevs=["CRITICAL","HIGH","MEDIUM","LOW","NONE"],m=[0,1,2,3].map(()=>[0,0,0,0,0]);
+  D.filas.forEach(r=>m[band(r[4])][sevs.indexOf(sevOf(r))]++);
+  Object.entries(D.resto.porSev).forEach(([s,n])=>{const i=sevs.indexOf(s);m[0][i<0?4:i]+=n});
+  const mx=Math.max(...m.flat());let h=`<span class="h"></span>`+sevs.map(s=>`<span class="h c">${s==="NONE"?esc(t("nocvss")):s}</span>`).join("");
+  [3,2,1,0].forEach(b=>{h+=`<span class="h">${esc(t("b"+b))}</span>`+sevs.map((s,i)=>{const v=m[b][i],a=v?Math.round(8+72*Math.log(v+1)/Math.log(mx+1)):0,on=S.hm&&S.hm.b===b&&S.hm.s===s;return `<button type="button" data-b="${b}" data-s="${s}" aria-pressed="${!!on}" style="background:color-mix(in srgb,var(--accent) ${a}%,var(--surface));${a>48?"color:#fff":""}">${nf(v)}</button>`}).join("")});
+  $("heat").innerHTML=h;
+  // productos
+  const pm={};let withP=0;D.filas.forEach(r=>{if(r[8]){withP++;const k=r[8]+" "+r[9];pm[k]=(pm[k]||0)+1}});
+  const ps=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,10),pmx=ps.length?ps[0][1]:1;
+  $("c_prod_s").textContent=t("c_prod_s",{pct:pc(withP/Math.max(1,D.filas.length),0)});
+  $("prods").innerHTML=ps.map(([k,n])=>`<button type="button" data-prod="${esc(k)}" title="${esc(k)}"${S.prod===k?' style="font-weight:600"':""}><span class="nm">${esc(k.replace(/_/g," "))}</span><span class="bar"><i style="width:${Math.round(n/pmx*100)}%"></i></span><span class="num">${nf(n)}</span></button>`).join("");
+  $("ls_note").textContent=t("ls_note",{a:nf(D.filas.length),b:nf(rest)});
+  renderTable();
+}
+const PAGE=25;
+function renderTable(){
+  const f=filtered(),pages=Math.max(1,Math.ceil(f.length/PAGE));if(S.page>=pages)S.page=pages-1;
+  $("thead").innerHTML=["th_p","th_cve","th_pub","th_cvss","th_epss","th_sig","th_prod"].map((k,i)=>`<th${i===3||i===4?' class="right"':""}>${esc(t(k))}</th>`).join("");
+  const sl=f.slice(S.page*PAGE,S.page*PAGE+PAGE);let h="";
+  sl.forEach(({r,pr})=>{
+    const d=r[14],arrow=d!=null&&Math.abs(d)>=.01?`<span class="${d>0?"up":"down"}">${d>0?"▲":"▼"}</span> `:"";
+    h+=`<tr class="r" data-id="${esc(r[0])}" tabindex="0"><td><span class="pill p${pr.p}">P${pr.p}</span></td><td class="mono">${esc(r[0])}</td><td class="num">${esc(dfm(r[1].slice(0,10),{day:"2-digit",month:"short"}))}</td><td class="right num">${r[2]!=null?nf(r[2],1)+` <span class="sev ${esc(r[3])}">${esc(r[3])}</span>`:"–"}</td><td class="right num">${arrow}${r[4]!=null?pc(r[4],r[4]<.1?2:1):"–"}</td><td>${r[6]?'<span class="tag kev">KEV</span> ':""}${r[7]?`<span class="tag rw">${t("rw")}</span> `:""}${xtags(r[13])}${r[12]?'<span class="tag">SSVC</span>':""}</td><td>${esc((r[8]?r[8]+" · "+r[9]:"–").replace(/_/g," "))}</td></tr>`;
+    if(S.open===r[0]){
+      const sv=(r[12]||"").split("/"),desc=lang==="es"&&r[11]?r[11]:r[10],orig=desc&&!(lang==="es"&&r[11])&&lang!=="en";
+      h+=`<tr class="det"><td colspan="7"><div class="why">${esc(reason(r,pr))}</div><div style="margin-top:6px">${esc(desc||t("nodesc"))}${orig?` <em>${esc(t("orig"))}</em>`:""}</div>${r[12]?`<div style="margin-top:6px">${esc(t("ssvc_l",{e:t("se_"+sv[0]),a:sv[1]?t("sa_"+sv[1]):"–",t:sv[2]?t("st_"+sv[2]):"–"}))}</div>`:""}${d!=null&&Math.abs(d)>=.001?`<div style="margin-top:6px">${esc(t("d7",{d:(d>0?"+":"−")+nf(Math.abs(d)*100,1)}))}</div>`:""}<div style="margin-top:8px;display:flex;gap:14px;flex-wrap:wrap"><a href="https://nvd.nist.gov/vuln/detail/${encodeURIComponent(r[0])}" target="_blank" rel="noopener">${esc(t("see_nvd"))}</a><a href="https://www.vicarius.io/request-a-demo" target="_blank" rel="noopener">${esc(t("see_vrx"))}</a></div></td></tr>`;
+    }
+  });
+  $("tbody").innerHTML=h||`<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--ink3)">${esc(t("none"))}</td></tr>`;
+  $("pgInfo").textContent=f.length?t("pg",{a:nf(S.page*PAGE+1),b:nf(Math.min(f.length,S.page*PAGE+PAGE)),n:nf(f.length)}):"";
+  $("pgPrev").disabled=S.page<=0;$("pgNext").disabled=S.page>=pages-1;
+}
+function renderSummaries(){
+  const cut=D.generado.slice(0,10),day=n=>new Date(Date.parse(cut+"T00:00:00Z")-n*864e5).toISOString().slice(0,10);
+  const build=(from,to,topN)=>{
+    const inR=d=>d>=from&&d<=to,rs=ROWS.filter(x=>inR(x.r[1].slice(0,10)));
+    let rest=0;Object.entries(D.resto.porDia).forEach(([d,n])=>{if(inR(d))rest+=n});
+    const p1=rs.filter(x=>x.pr.p===1).length,p2=rs.filter(x=>x.pr.p===2).length,top=rs.filter(x=>x.pr.p<=2).slice(0,topN);
+    const L=[t("sum_t",{a:from===to?dfm(from):t("sum_r",{a:dfm(from),b:dfm(to)})}),"",t("sum_1",{n:nf(rs.length+rest)}),t("sum_2",{n:nf(rs.filter(x=>(x.r[2]||0)>=9).length)}),t("sum_3",{n:nf(D.kev.filter(k=>inR(k[4])).length)}),t("sum_4",{a:nf(p1),b:nf(p2)}),""];
+    if(top.length){L.push(t("sum_5"));top.forEach(x=>L.push(`• P${x.pr.p} ${x.r[0]}${x.r[8]?" ("+(x.r[8]+" "+x.r[9]).replace(/_/g," ")+")":""} · CVSS ${x.r[2]!=null?nf(x.r[2],1):"–"} · EPSS ${x.r[4]!=null?pc(x.r[4]):"–"}${x.r[6]?" · KEV":""}`))}else L.push(t("sum_none"));
+    L.push("",t("sum_6",{d:dtm(D.generado)}));return L.join("\n");
+  };
+  $("sumD").textContent=build(day(1),day(1),5);$("sumW").textContent=build(day(7),day(1),10);
+}
+const REG={na:["US","CA","MX"],ca:["GT","BZ","SV","HN","NI","CR","PA","CU","DO","HT","JM","TT","BS","BB","AG","DM","GD","KN","LC","VC","PR"],sa:["CO","VE","EC","PE","BO","CL","AR","UY","PY","BR","GY","SR"]};
+function cname(cc){try{return new Intl.DisplayNames([LOC[lang]],{type:"region"}).of(cc)}catch(e){return cc}}
+function regionAgg(ccs){
+  const m={},g={};let n=0,withV=0;
+  ccs.forEach(cc=>{const c=D.ransomware[cc];if(!c)return;n+=c.n;if(c.n)withV++;Object.entries(c.m).forEach(([k,v])=>m[k]=(m[k]||0)+v);c.g.forEach(([k,v])=>g[k]=(g[k]||0)+v)});
+  return {n,withV,m,g:Object.entries(g).sort((a,b)=>b[1]-a[1])};
+}
+function renderRegion(){
+  const y=String(D.anio),all=[...REG.na,...REG.ca,...REG.sa],ccs=(S.reg==="all"?all:REG[S.reg]).filter(cc=>D.ransomware[cc]);
+  if(S.cc&&!ccs.includes(S.cc))S.cc=null;
+  $("regs").innerHTML=["all","na","ca","sa"].map(k=>`<button type="button" data-reg="${k}" aria-pressed="${S.reg===k}">${esc(t("rg_"+k))}</button>`).join("");
+  const A=regionAgg(ccs),peak=Object.entries(A.m).sort((a,b)=>b[1]-a[1])[0];
+  $("kpisR").innerHTML=kpi(nf(A.n),t("rg_k1",{y}),1)+kpi(nf(A.withV)+" / "+nf(ccs.length),t("rg_k2"))+kpi(A.g.length?A.g[0][0]:"–",t("rg_k3"))+kpi(peak?mon(peak[0])+" · "+nf(peak[1]):"–",t("rg_k4"));
+  const rk=ccs.map(cc=>[cc,D.ransomware[cc].n]).sort((a,b)=>b[1]-a[1]),mx=Math.max(1,rk.length?rk[0][1]:1);
+  $("countries").innerHTML=rk.map(([cc,n])=>`<button type="button" data-cc="${cc}" aria-pressed="${S.cc===cc}"${S.cc===cc?' style="font-weight:600"':""}><span class="nm">${esc(cname(cc))}</span><span class="bar"><i style="width:${n?Math.max(1.5,n/mx*100):0}%"></i></span><span class="num">${nf(n)}</span></button>`).join("");
+  const Dt=S.cc?regionAgg([S.cc]):A;
+  $("rg_title").textContent=(S.cc?cname(S.cc):t("rg_"+S.reg))+" · "+nf(Dt.n)+" "+t("rg_n");
+  const gx=Dt.g.slice(0,8),gm=Math.max(1,gx.length?gx[0][1]:1);
+  $("groups").innerHTML=gx.length?gx.map(([k,v])=>`<div style="display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:8px;align-items:center;font-size:13.5px"><span class="nm">${esc(k)}</span><span class="bar"><i style="width:${Math.round(v/gm*100)}%"></i></span><span class="num">${nf(v)}</span></div>`).join(""):`<div class="sub">${esc(t("rg_no"))}</div>`;
+  drawReg(Dt);
+}
+function drawReg(Dt){
+  const i=charts.findIndex(c=>c.canvas.id==="chReg");if(i>=0){charts[i].destroy();charts.splice(i,1)}
+  const ms=Object.keys(D.cvePorMes).sort();
+  mk("chReg",{type:"bar",data:{labels:ms.map(mon),datasets:[{label:t("rg_n"),data:ms.map(m=>Dt.m[m]||0),backgroundColor:css("--accent"),borderRadius:5,maxBarThickness:34}]},
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:{grid:{display:false},border:{color:css("--line")}},y:{grid:{color:css("--line")},border:{display:false},beginAtZero:true,ticks:{precision:0,callback:v=>nf(v)}}}})});
+}
+function renderMethod(){
+  const R=[[1,"ru1",["ru1a","ru1b","ru1c"]],[2,"ru2",["ru2a","ru2b","ru2c"]],[3,"ru3",["ru3a","ru3b"]],[4,"ru4",["ru4a"]]];
+  $("rules").innerHTML=R.map(([p,k,ls])=>`<div class="rule"><div><span class="pill p${p}">P${p}</span> <b style="font-weight:500">${esc(t(k))}</b></div><ul>${ls.map(l=>`<li>${esc(t(l))}</li>`).join("")}</ul></div>`).join("");
+  const X=D.exploits,src=[["s1",t("s1d",{n:nf(D.peticionesNvd)})],["s2",t("s2d",{n:nf(D.kevCatalogo.total),v:D.kevCatalogo.version})],["s3",t("s3d",{m:D.epss.modelo,d:dfm(D.epss.fecha)})],["s4",t("s4d",{a:nf(D.ssvc.consultados),b:nf(D.ssvc.conDatos)})],["s5",t("s5d",{a:nf(X.nuclei),b:nf(X.metasploit),c:nf(X.exploitdb)})],["s6",t("s6d")]];
+  $("sources").innerHTML=src.map(([k,d])=>`<div class="card"><h3>${esc(t(k))}</h3><div class="sub">${esc(d)}</div></div>`).join("");
+  $("ft_l").textContent=t("ft_l",{d:dtm(D.generado)});
+}
+function renderAll(){renderStatic();if(!D)return;compute();renderPanorama();renderList();renderSummaries();renderMethod();drawCharts()}
+function relist(){compute();renderList();renderSummaries();drawDay()}
+
+/* ---------- Exportar ---------- */
+function tableText(sep){
+  const q=v=>{v=String(v==null?"":v);return sep===","?'"'+v.replace(/"/g,'""')+'"':v.replace(/[\t\n]/g," ")};
+  const head=[t("th_p"),"CVE",t("th_pub"),"CVSS",t("f_sev"),"EPSS",t("pctl",{p:""}).trim(),"KEV",t("rw"),t("f_x"),"SSVC",t("th_prod"),t("th_why"),t("th_desc")];
+  const out=[head.map(q).join(sep)];
+  filtered().forEach(({r,pr})=>out.push([ "P"+pr.p,r[0],r[1].slice(0,10),r[2]??"",r[3],r[4]??"",r[5]??"",r[6]?1:0,r[7]?1:0,[r[13]&1?"Nuclei":"",r[13]&2?"Metasploit":"",r[13]&4?"Exploit-DB":""].filter(Boolean).join(" "),r[12],(r[8]+" "+r[9]).trim(),reason(r,pr),lang==="es"&&r[11]?r[11]:r[10]].map(q).join(sep)));
+  return out.join("\n");
+}
+let downloads=null;
+async function saveCsv(){
+  const data="﻿"+tableText(","),filename="vulnerabilidades-priorizadas-"+D.generado.slice(0,10)+".csv";
+  if(!downloads){try{const u=URL.createObjectURL(new Blob([data],{type:"text/csv;charset=utf-8"})),a=document.createElement("a");a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);toast(t("saved"))}catch(e){copyText(tableText("\t"))}return}
+  try{await downloads.save({filename,data});toast(t("saved"))}
+  catch(e){try{await downloads.save({filename,data:new Blob([data],{type:"text/csv"})});toast(t("saved"))}catch(e2){copyText(tableText("\t"))}}
+}
+
+/* ---------- Eventos ---------- */
+function setLang(l){lang=l;try{localStorage.setItem("vx_lang",l)}catch(e){}renderAll()}
+$("langs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)setLang(b.dataset.lang)});
+$("theme").addEventListener("click",()=>{const dark=css("--logo-dark")==="block";document.documentElement.setAttribute("data-theme",dark?"light":"dark")});
+new MutationObserver(()=>{renderStatic();if(D)drawCharts()}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{renderStatic();if(D)drawCharts()});
+document.querySelectorAll(".nav a,.logo").forEach(a=>a.addEventListener("click",e=>{const el=document.querySelector(a.getAttribute("href"));if(el){e.preventDefault();el.scrollIntoView({block:"start"})}}));
+const bind=(id,ev,fn)=>$(id).addEventListener(ev,fn);
+bind("fQ","input",e=>{S.q=e.target.value;S.page=0;renderTable()});
+bind("fP","change",e=>{S.p=e.target.value;S.page=0;renderTable()});
+bind("fS","change",e=>{S.s=e.target.value;S.page=0;renderTable()});
+bind("fK","change",e=>{S.kev=e.target.checked;S.page=0;renderTable()});
+bind("fX","change",e=>{S.x=e.target.checked;S.page=0;renderTable()});
+bind("fC","change",e=>{S.chg=e.target.checked;S.page=0;renderTable()});
+bind("fCrit","change",e=>{S.crit=e.target.value;relist()});
+bind("fExp","change",e=>{S.exp=e.target.value;relist()});
+bind("t1","input",e=>{S.t1=+e.target.value/100;if(S.t2>=S.t1){S.t2=Math.max(.02,S.t1-.05);$("t2").value=S.t2*100}relist()});
+bind("t2","input",e=>{S.t2=Math.min(+e.target.value/100,S.t1-.01);relist()});
+bind("pgPrev","click",()=>{S.page--;renderTable()});bind("pgNext","click",()=>{S.page++;renderTable()});
+bind("bReset","click",()=>{Object.assign(S,{q:"",p:"",s:"",kev:false,x:false,chg:false,page:0,hm:null,prod:null,open:null});$("fQ").value="";$("fP").value="";$("fS").value="";$("fK").checked=$("fX").checked=$("fC").checked=false;renderList()});
+bind("bCopy","click",()=>copyText(tableText("\t")));
+bind("bCsv","click",saveCsv);
+bind("heat","click",e=>{const b=e.target.closest("button");if(!b)return;const v={b:+b.dataset.b,s:b.dataset.s};S.hm=S.hm&&S.hm.b===v.b&&S.hm.s===v.s?null:v;S.page=0;renderList();$("tbody").closest(".card").scrollIntoView({block:"nearest"})});
+bind("prods","click",e=>{const b=e.target.closest("button");if(!b)return;S.prod=S.prod===b.dataset.prod?null:b.dataset.prod;S.page=0;renderList()});
+bind("regs","click",e=>{const b=e.target.closest("button");if(b){S.reg=b.dataset.reg;S.cc=null;renderRegion()}});
+bind("countries","click",e=>{const b=e.target.closest("button");if(b){S.cc=S.cc===b.dataset.cc?null:b.dataset.cc;renderRegion()}});
+const toggleRow=tr=>{S.open=S.open===tr.dataset.id?null:tr.dataset.id;renderTable()};
+bind("tbody","click",e=>{if(e.target.closest("a"))return;const tr=e.target.closest("tr.r");if(tr)toggleRow(tr)});
+bind("tbody","keydown",e=>{if(e.key==="Enter"||e.key===" "){const tr=e.target.closest("tr.r");if(tr){e.preventDefault();toggleRow(tr)}}});
+document.querySelectorAll("[data-copy]").forEach(b=>b.addEventListener("click",()=>copyText($(b.dataset.copy).textContent)));
+
+/* ---------- Inicio ---------- */
+try{const s=localStorage.getItem("vx_lang");if(LANGS.includes(s))lang=s;else{const n=(navigator.language||"es").slice(0,2).toLowerCase();if(n==="pt"||n==="en")lang=n}}catch(e){}
+renderStatic();
+fetch("data.json?"+Math.floor(Date.now()/6e5)).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(j=>{D=j;$("state").hidden=true;$("app").hidden=false;renderAll()}).catch(()=>{$("state").textContent=t("load_err")});
+if(window.claude&&window.claude.use)window.claude.use("downloads").then(d=>{if(d){downloads=d;$("bCsv").hidden=false}}).catch(()=>{});
+else $("bCsv").hidden=false;
+</script>
+</body>
+</html>
